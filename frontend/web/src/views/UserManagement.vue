@@ -206,7 +206,7 @@ async function handleSubmit() {
     try {
       const data = { ...formData }
       if (data.password === '') {
-        delete data.password
+        delete (data as any).password
       }
 
       if (isEdit.value) {

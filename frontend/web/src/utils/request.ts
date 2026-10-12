@@ -43,4 +43,5 @@ request.interceptors.response.use(
   }
 )
 
-export default request
+// 拦截器已返回 response.data，实例的实际类型与 axios 默认声明不符，统一按 any 使用
+export default request as any
