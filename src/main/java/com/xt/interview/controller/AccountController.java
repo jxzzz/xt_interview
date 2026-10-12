@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/accounts")
@@ -19,6 +20,16 @@ public class AccountController {
     @GetMapping
     public ResponseEntity<List<AccountDTO>> getAll() {
         return ResponseEntity.ok(accountService.getAllAccounts());
+    }
+
+    @GetMapping("/page")
+    public ResponseEntity<Map<String, Object>> getPage(
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) Integer roleLevel,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(accountService.getAccountPage(username, status, roleLevel, page, size));
     }
 
     @GetMapping("/{id}")

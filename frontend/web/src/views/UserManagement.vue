@@ -4,7 +4,27 @@
       <el-button type="primary" :icon="Plus" @click="openCreateDialog">
         添加用户
       </el-button>
-      <el-button :icon="Refresh" @click="loadUsers">刷新</el-button>
+      <el-button :icon="Refresh" @click="handleSearch">刷新</el-button>
+    </div>
+
+    <div class="search-bar">
+      <el-input
+        v-model="searchForm.username"
+        placeholder="用户名"
+        clearable
+        style="width: 180px"
+        @keyup.enter="handleSearch"
+      />
+      <el-select v-model="searchForm.status" placeholder="状态" clearable style="width: 120px">
+        <el-option label="启用" :value="1" />
+        <el-option label="禁用" :value="0" />
+      </el-select>
+      <el-select v-model="searchForm.roleLevel" placeholder="权限级别" clearable style="width: 140px">
+        <el-option label="用户权限" :value="1" />
+        <el-option label="管理员权限" :value="2" />
+        <el-option label="超级管理员权限" :value="3" />
+      </el-select>
+      <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
     </div>
 
     <el-table
@@ -18,6 +38,11 @@
       <el-table-column prop="name" label="姓名" width="100" />
       <el-table-column prop="gender" label="性别" width="80" />
       <el-table-column prop="phone" label="联系方式" width="140" />
+      <el-table-column prop="departmentName" label="所属部门" width="120">
+        <template #default="{ row }">
+          {{ row.departmentName || '-' }}
+        </template>
+      </el-table-column>
       <el-table-column label="权限级别" width="120">
         <template #default="{ row }">
           <el-tag :type="roleTagType(row.roleLevel)">
@@ -45,6 +70,17 @@
       </el-table-column>
     </el-table>
 
+    <el-pagination
+      v-model:current-page="pagination.currentPage"
+      v-model:page-size="pagination.pageSize"
+      :total="pagination.totalElements"
+      :page-sizes="[5, 10, 20, 50]"
+      layout="total, sizes, prev, pager, next, jumper"
+      style="margin-top: 20px; justify-content: flex-end"
+      @current-change="loadUsers"
+      @size-change="handleSizeChange"
+    />
+
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑用户' : '添加用户'"
@@ -71,6 +107,22 @@
         </el-form-item>
         <el-form-item label="联系方式" prop="phone">
           <el-input v-model="formData.phone" placeholder="请输入联系方式" />
+        </el-form-item>
+        <el-form-item label="所属部门" prop="departmentId">
+          <el-select
+            v-model="formData.departmentId"
+            placeholder="请选择所属部门"
+            clearable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="dept in departments"
+              :key="dept.id"
+              :label="dept.status === 1 ? dept.name : `${dept.name}（已禁用）`"
+              :value="dept.id"
+              :disabled="dept.status === 0"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="密码" prop="password">
           <el-input
@@ -106,9 +158,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { accountApi } from '@/api'
+import { accountApi, departmentApi } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, Refresh } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Refresh, Search } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 
 const loading = ref(false)
@@ -118,6 +170,19 @@ const isEdit = ref(false)
 const editId = ref<number>(0)
 
 const users = ref<any[]>([])
+const departments = ref<any[]>([])
+
+const searchForm = reactive({
+  username: '',
+  status: null as number | null,
+  roleLevel: null as number | null
+})
+
+const pagination = reactive({
+  currentPage: 1,
+  pageSize: 10,
+  totalElements: 0
+})
 
 const formRef = ref<FormInstance>()
 
@@ -129,7 +194,8 @@ const formData = reactive({
   password: '',
   roleLevel: 1,
   status: 1,
-  isSuper: 0
+  isSuper: 0,
+  departmentId: null as number | null
 })
 
 const formRules: FormRules = {
@@ -156,12 +222,30 @@ function roleTagType(level: number): 'info' | 'warning' | 'danger' {
 async function loadUsers() {
   loading.value = true
   try {
-    users.value = await accountApi.getAll()
+    const data = await accountApi.getPage({
+      username: searchForm.username || undefined,
+      status: searchForm.status ?? undefined,
+      roleLevel: searchForm.roleLevel ?? undefined,
+      page: pagination.currentPage - 1,
+      size: pagination.pageSize
+    })
+    users.value = data.list
+    pagination.totalElements = data.totalElements
   } catch (error: any) {
     ElMessage.error(error.message || '加载用户列表失败')
   } finally {
     loading.value = false
   }
+}
+
+function handleSearch() {
+  pagination.currentPage = 1
+  loadUsers()
+}
+
+function handleSizeChange() {
+  pagination.currentPage = 1
+  loadUsers()
 }
 
 function resetForm() {
@@ -173,6 +257,7 @@ function resetForm() {
   formData.roleLevel = 1
   formData.status = 1
   formData.isSuper = 0
+  formData.departmentId = null
   isEdit.value = false
   editId.value = 0
   formRef.value?.resetFields()
@@ -194,6 +279,7 @@ function openEditDialog(row: any) {
   formData.roleLevel = row.roleLevel
   formData.status = row.status
   formData.isSuper = row.isSuper
+  formData.departmentId = row.departmentId ?? null
   dialogVisible.value = true
 }
 
@@ -249,6 +335,9 @@ async function handleDelete(row: any) {
 
 onMounted(() => {
   loadUsers()
+  departmentApi.getAll()
+    .then((list: any[]) => { departments.value = list })
+    .catch(() => { /* 部门列表加载失败不阻塞页面 */ })
 })
 </script>
 
@@ -260,6 +349,12 @@ onMounted(() => {
 }
 
 .page-header {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.search-bar {
   display: flex;
   gap: 12px;
   margin-bottom: 20px;
